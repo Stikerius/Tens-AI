@@ -1,8 +1,10 @@
 import chromadb
 
 client = chromadb.PersistentClient(path="./tens_memory")
-memory = client.get_or_create_collection("tens_memory")
 
-# Alles löschen
-client.delete_collection("tens_memory")
-print("Gedächtnis gelöscht.")
+# Alle Collections löschen
+for col in client.list_collections():
+    client.delete_collection(col.name)
+    print(f"Gelöscht: {col.name}")
+
+print("Alles gelöscht.")
