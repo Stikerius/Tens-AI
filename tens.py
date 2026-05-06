@@ -3,7 +3,7 @@ import chromadb
 import json
 import os
 from datetime import datetime
-from scraper import lese_webseite
+from scraper import lese_webseite, suche_und_lerne
 
 # ChromaDB Setup
 client = chromadb.PersistentClient(path="./tens_memory")
@@ -40,6 +40,18 @@ def suche_gespraeche(frage):
         pass
     return ""
 
+def braucht_suche(frage):
+    # Aktuelle Themen immer suchen
+    aktuelle_keywords = ["2026", "2025", "neu", "aktuell", "heute", "neueste", "gerade"]
+    if any(k in frage.lower() for k in aktuelle_keywords):
+        return True
+    
+    # Sonst prüfen ob Wissen vorhanden
+    results = gespraeche.query(query_texts=[frage], n_results=1)
+    if results["documents"][0]:
+        return False
+    return True
+
 def extrahiere_fakten(user_msg, tens_msg):
     response = requests.post(
         "http://localhost:11434/api/chat",
@@ -67,6 +79,7 @@ def extrahiere_fakten(user_msg, tens_msg):
             text = text.split("```")[1].replace("json", "").strip()
         fakten = json.loads(text)
         fakten = {k: v for k, v in fakten.items() if v is not None and v != ""}
+        fakten = {k: v for k, v in fakten.items() if v is not None and v != "" and v != []}
         if fakten:
             profil = lade_profil()
             profil.update(fakten)
@@ -75,7 +88,54 @@ def extrahiere_fakten(user_msg, tens_msg):
     except:
         pass
 
-def chat(message, history=[]):
+def verarbeite_zu_wissen(url, text):
+    # TENS versteht den Inhalt und extrahiert strukturiertes Wissen
+    response = requests.post(
+        "http://localhost:11434/api/chat",
+        json={
+            "model": "dolphin-mistral",
+            "messages": [{
+                "role": "user",
+                "content": f"""Du liest diesen Text und extrahierst daraus strukturiertes Wissen.
+
+Text: {text[:3000]}
+
+Erstelle eine Liste von Dingen die du gelernt hast – als konkrete Fakten und Fähigkeiten.
+Format:
+FAKT: [was du gelernt hast]
+SKILL: [was du jetzt kannst/weisst]
+
+Beispiel:
+FAKT: Python wurde 1991 von Guido van Rossum entwickelt
+SKILL: Ich kann erklären wie Python Einrückungen statt Klammern nutzt
+
+Extrahiere alles Wichtige aus dem Text."""
+            }],
+            "stream": False
+        }
+    )
+    
+    wissen = response.json()["message"]["content"]
+    
+    # Wissen in ChromaDB speichern
+    try:
+        gespraeche.add(
+            documents=[wissen],
+            ids=[url],
+            metadatas=[{"quelle": url, "typ": "wissen"}]
+        )
+        print(f"[TENS hat neues Wissen gespeichert aus: {url}]")
+        print(wissen)
+    except:
+        # URL bereits gespeichert - updaten
+        gespraeche.update(
+            documents=[wissen],
+            ids=[url],
+            metadatas=[{"quelle": url, "typ": "wissen"}]
+        )
+        print(f"[Wissen aktualisiert: {url}]")
+
+def chat(message, history=[], extrahiere=True):
     profil = lade_profil()
     profil_text = "\n".join([f"{k}: {v}" for k, v in profil.items()])
     
@@ -130,7 +190,8 @@ Relevante vergangene Gespräche:
     
     # Gespräch speichern + Fakten extrahieren
     speichere_gespraech(message, reply)
-    extrahiere_fakten(message, reply)
+    if extrahiere:
+        extrahiere_fakten(message, reply)
     
     return history
 
@@ -138,7 +199,25 @@ print("TENS ist bereit. Tippe 'exit' zum Beenden.\n")
 history = []
 
 while True:
-    user_input = input("Ich: ")
+    user_input = input("Du: ")
     if user_input.lower() == "exit":
         break
-    history = chat(user_input, history)
+    # URL automatisch erkennen
+    if user_input.startswith("http"):
+        print("[TENS liest und lernt...]")
+        inhalt = lese_webseite(user_input)
+        verarbeite_zu_wissen(user_input, inhalt)
+        user_input = f"Du hast gerade diese Webseite gelesen und Wissen daraus extrahiert. Fasse in 3-4 Sätzen zusammen was du über das Thema gelernt hast:\n\nDein extrahiertes Wissen wurde gespeichert."        
+        history = chat(user_input, history, extrahiere=False)
+    else:
+        if braucht_suche(user_input):
+            print("[TENS hat kein Wissen dazu – sucht im Internet...]")
+            neues_wissen = suche_und_lerne(user_input)
+            verarbeite_zu_wissen(user_input, neues_wissen)
+            user_input = f"""WICHTIG: Beantworte NUR basierend auf diesen aktuellen Informationen. Erfinde nichts dazu.
+
+Aktuelle Informationen:
+{neues_wissen[:2000]}
+
+Frage: {user_input}"""
+        history = chat(user_input, history, extrahiere=False)  # ← False

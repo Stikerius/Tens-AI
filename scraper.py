@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from ddgs import DDGS
 
 def lese_webseite(url):
     try:
@@ -17,8 +18,23 @@ def lese_webseite(url):
     except Exception as e:
         return f"Fehler: {e}"
 
+def suche_und_lerne(frage):
+    print(f"[TENS sucht nach: {frage}]")
+    try:
+        with DDGS() as ddgs:
+            resultate = list(ddgs.text(frage, max_results=3))
+        
+        gesamttext = ""
+        for r in resultate:
+            gesamttext += f"Quelle: {r['href']}\n{r['body']}\n\n"
+        
+        return gesamttext
+    except Exception as e:
+        return f"Suche fehlgeschlagen: {e}"
+
 # Test
 if __name__ == "__main__":
     url = input("URL eingeben: ")
     text = lese_webseite(url)
     print(text)
+
