@@ -376,11 +376,11 @@ body::before {
 </div>
 
 <div id="legend">
-  <div class="leg-item"><div class="leg-dot" style="background:#00c8ff;box-shadow:0 0 6px #00c8ff"></div>KERN</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#00c8ff;box-shadow:0 0 6px #00c8ff"></div>KERN / GESPRÄCHE</div>
   <div class="leg-item"><div class="leg-dot" style="background:#ff6b35;box-shadow:0 0 6px #ff6b35"></div>TECHNOLOGIE</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#ffd700;box-shadow:0 0 6px #ffd700"></div>AKTUELLES</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#7fff7f;box-shadow:0 0 6px #7fff7f"></div>PERSÖNLICH</div>
   <div class="leg-item"><div class="leg-dot" style="background:#bf7fff;box-shadow:0 0 6px #bf7fff"></div>WISSENSCHAFT</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#7fff7f;box-shadow:0 0 6px #7fff7f"></div>PERSÖNLICH</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#ffd700;box-shadow:0 0 6px #ffd700"></div>AKTUELLES</div>
 </div>
 
 <div id="input-overlay">
@@ -405,6 +405,15 @@ const CAT = {
   aktuell:      { color: '#ffd700', rgb: [255, 215, 0]  },
   persoenlich:  { color: '#7fff7f', rgb: [127, 255, 127] },
   wissenschaft: { color: '#bf7fff', rgb: [191, 127, 255] },
+};
+
+// Cluster target positions (fraction of screen) per category
+const CLUSTER_POS = {
+  kern:         { x: 0.50, y: 0.50 },
+  technologie:  { x: 0.72, y: 0.28 },
+  wissenschaft: { x: 0.72, y: 0.72 },
+  persoenlich:  { x: 0.28, y: 0.72 },
+  aktuell:      { x: 0.28, y: 0.28 },
 };
 
 const FALLBACK = {
@@ -561,7 +570,9 @@ function particleLoop() {
 // SVG / D3 SETUP
 // ═══════════════════════════════════════════════════════════════════════════════
 function nodeRadius(d) {
-  return Math.max(20, Math.min(56, 16 + (d.entries || 1) * 2.4));
+  if (d.id && d.id.startsWith('fact-')) return 9;
+  if (d.id && d.id.startsWith('sub-'))  return Math.max(14, Math.min(32, 12 + (d.entries || 1) * 1.8));
+  return Math.max(22, Math.min(62, 18 + (d.entries || 1) * 2.8));
 }
 
 function setupSVG() {
@@ -629,9 +640,10 @@ function draw() {
     .attr('stroke-dashoffset', 0)
     .attr('opacity', 0.28);
 
-  // ─ Pulse rings ─
+  // ─ Pulse rings (main nodes only) ─
   pulseEl = g.selectAll('.pulse')
-    .data(nodes).enter().append('circle').attr('class', 'pulse')
+    .data(nodes.filter(d => !d.id.startsWith('fact-') && !d.id.startsWith('sub-')))
+    .enter().append('circle').attr('class', 'pulse')
     .attr('fill', 'none')
     .attr('stroke', d => CAT[d.cat]?.color || '#00c8ff')
     .attr('stroke-width', 0.6)
@@ -653,11 +665,12 @@ function draw() {
     .attr('r', nodeRadius)
     .attr('fill', d => {
       const c = d3.color(CAT[d.cat]?.color || '#00c8ff');
-      c.opacity = 0.13;
+      c.opacity = d.id.startsWith('fact-') ? 0.06 : d.id.startsWith('sub-') ? 0.09 : 0.13;
       return c.toString();
     })
     .attr('stroke', d => CAT[d.cat]?.color || '#00c8ff')
-    .attr('stroke-width', 1.5)
+    .attr('stroke-width', d => d.id.startsWith('fact-') ? 0.7 : d.id.startsWith('sub-') ? 1.0 : 1.5)
+    .attr('stroke-opacity', d => d.id.startsWith('fact-') ? 0.5 : 1.0)
     .attr('filter', d => `url(#glow-${d.cat})`)
     .style('cursor', 'pointer')
     .on('mouseover', onHover)
@@ -669,13 +682,15 @@ function draw() {
       .on('drag', dragged)
       .on('end', dragEnd));
 
-  // Breathing animation
+  // Breathing animation (skip tiny fact/sub nodes)
   nodeEl.each(function(d, i) {
+    if (d.id.startsWith('fact-')) return;
     const base = nodeRadius(d);
     const el = d3.select(this);
+    const scale = d.id.startsWith('sub-') ? 1.06 : 1.09;
     (function breathe() {
       el.transition().delay(i * 120).duration(2600 + Math.random()*1400).ease(d3.easeSinInOut)
-        .attr('r', base * 1.09)
+        .attr('r', base * scale)
         .transition().duration(2600 + Math.random()*1400).ease(d3.easeSinInOut)
         .attr('r', base).on('end', breathe);
     })();
@@ -687,10 +702,14 @@ function draw() {
     .attr('text-anchor', 'middle').attr('dy', '0.35em')
     .attr('fill', d => CAT[d.cat]?.color || '#00c8ff')
     .attr('font-family', 'Share Tech Mono, monospace')
-    .attr('font-size', d => Math.max(9, Math.min(13, nodeRadius(d) * .37)))
+    .attr('font-size', d => {
+      if (d.id.startsWith('fact-')) return 7;
+      if (d.id.startsWith('sub-'))  return 8;
+      return Math.max(9, Math.min(13, nodeRadius(d) * .37));
+    })
     .attr('letter-spacing', '1')
     .attr('pointer-events', 'none')
-    .attr('opacity', .9)
+    .attr('opacity', d => d.id.startsWith('fact-') ? 0.55 : d.id.startsWith('sub-') ? 0.7 : 0.9)
     .text(d => d.label.toUpperCase().slice(0, 15));
 
   simulation.on('tick', tick);
@@ -825,10 +844,24 @@ function buildSimulation() {
   });
   if (simulation) simulation.stop();
   simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(140 + Math.random() * 40))
-    .force('charge', d3.forceManyBody().strength(-520))
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+      const t = typeof d.target === 'object' ? d.target : nodes.find(n => n.id === d.target);
+      if (t && (t.id.startsWith('fact-') || t.id.startsWith('sub-'))) return 70;
+      return 140 + Math.random() * 40;
+    }))
+    .force('charge', d3.forceManyBody().strength(d =>
+      d.id.startsWith('fact-') ? -80 : d.id.startsWith('sub-') ? -200 : -520
+    ))
     .force('center', d3.forceCenter(cx, cy))
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 22));
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 16))
+    .force('clusterX', d3.forceX(d => {
+      const c = CLUSTER_POS[d.cat] || CLUSTER_POS.kern;
+      return c.x * window.innerWidth;
+    }).strength(d => d.id === 'tens-core' ? 0.25 : 0.055))
+    .force('clusterY', d3.forceY(d => {
+      const c = CLUSTER_POS[d.cat] || CLUSTER_POS.kern;
+      return c.y * window.innerHeight;
+    }).strength(d => d.id === 'tens-core' ? 0.25 : 0.055));
 }
 
 async function initGraph(data) {

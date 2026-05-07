@@ -4,7 +4,7 @@ import chromadb
 import json
 import os
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime
 
 app = FastAPI()
@@ -27,179 +27,238 @@ STOP_WORDS = {
     "the", "and", "for", "are", "with", "has", "was", "from", "have", "been", "which",
     "will", "your", "all", "use", "can", "its", "you", "our", "new", "one", "about",
     "also", "into", "than", "fakt", "skill", "dieser", "diese", "dieses", "sehr",
-    "damit", "dabei", "durch", "deine", "seine", "keine", "jetzt", "hier", "dass",
-    "lerne", "gelernt", "erklärt", "erkläre", "immer", "noch", "bereits", "wurde",
-    "werden", "haben", "hatte", "hatte", "beim", "beim", "einen", "einer", "diesem",
-    "dieser", "diesen", "diesem", "welche", "welcher", "welches", "ihrer", "ihren",
+    "damit", "dabei", "deine", "seine", "keine", "jetzt", "hier",
+    "lerne", "gelernt", "erklärt", "erkläre", "immer", "noch", "bereits",
+    "werden", "haben", "hatte", "beim", "einen", "einer", "diesem",
+    "dieser", "diesen", "welche", "welcher", "welches", "ihrer", "ihren",
+    "sagte", "sagen", "gesagt", "antwortete", "antwortet", "frage", "fragte",
 }
 
-CATEGORY_MAP = {
-    "technologie": [
-        "python", "javascript", "react", "docker", "git", "ollama", "chromadb",
-        "api", "code", "llm", "model", "fastapi", "server", "gpu", "cpu",
-        "software", "hardware", "database", "sql", "linux", "windows", "html",
-        "css", "json", "http", "rest", "tensorflow", "pytorch", "numpy", "pandas",
-        "embedding", "vektor", "pipeline", "framework", "library", "uvicorn",
-        "beautifulsoup", "requests", "flask", "django", "scraping", "crawling",
-        "programm", "programmi", "skript", "funktion", "klasse", "objekt",
-    ],
-    "wissenschaft": [
-        "physik", "biologie", "chemie", "mathematik", "astronomie", "quantum",
-        "quanten", "wissenschaft", "forschung", "theorie", "atom", "molekül",
-        "evolution", "genetik", "neural", "neuronales", "backpropagation",
-        "transformer", "algorithmus", "statistik", "wahrscheinlichkeit",
-    ],
-    "aktuell": [
-        "2025", "2026", "2024", "news", "update", "release", "launch",
-        "mistral", "openai", "gpt", "claude", "gemini", "llama", "deepseek",
-        "anthropic", "google", "microsoft", "nvidia", "aktuell",
-    ],
-    "persoenlich": [
-        "ivan", "ubs", "zürich", "schule", "bzz", "lehrling", "ausbildung",
-        "geburtstag", "name", "beruf", "wohnort", "hobby",
-    ],
+COLLECTION_CATEGORY = {
+    "wissen_python":      "technologie",
+    "wissen_javascript":  "technologie",
+    "wissen_html":        "technologie",
+    "wissen_css":         "technologie",
+    "wissen_linux":       "technologie",
+    "wissen_docker":      "technologie",
+    "wissen_git":         "technologie",
+    "wissen_allgemein":   "technologie",
+    "wissen_mathematik":  "wissenschaft",
+    "wissen_physik":      "wissenschaft",
+    "wissen_chemie":      "wissenschaft",
+    "wissen_biologie":    "wissenschaft",
+    "wissen_astronomie":  "wissenschaft",
 }
 
 
-def categorize(word: str) -> str:
-    w = word.lower()
-    for cat, keywords in CATEGORY_MAP.items():
-        if any(k in w or w == k for k in keywords):
-            return cat
-    return "kern"
+def collection_to_category(col_name: str) -> str:
+    return COLLECTION_CATEGORY.get(
+        col_name, "technologie" if col_name.startswith("wissen_") else "kern"
+    )
+
+
+def collection_display_name(col_name: str) -> str:
+    if col_name.startswith("wissen_"):
+        return col_name[7:].replace("_", " ").title()
+    if col_name == "gespraeche":
+        return "Gespräche"
+    return col_name.replace("_", " ").title()
 
 
 def url_to_topic(url: str) -> str:
-    clean = re.sub(r'https?://(www\.)?', '', url)
+    clean = re.sub(r"https?://(www\.)?", "", url)
     parts = clean.split("/")
     for part in parts[1:]:
-        part = re.sub(r'[?#].*', '', part)
-        part = re.sub(r'[-_]', ' ', part)
-        part = re.sub(r'\.\w+$', '', part)
+        part = re.sub(r"[?#].*", "", part)
+        part = re.sub(r"[-_]", " ", part)
+        part = re.sub(r"\.\w+$", "", part)
         if len(part) > 2 and not part.isdigit():
-            return part.strip().title()[:24]
-    return parts[0][:24].title()
+            return part.strip().title()[:22]
+    return parts[0][:22].title()
+
+
+def extract_key_phrases(documents: list, max_phrases: int = 6) -> list:
+    """Extract FAKT/SKILL lines; fall back to bigrams from conversation text."""
+    fakt_lines = []
+    for doc in documents:
+        for line in doc.split("\n"):
+            line = line.strip()
+            if line.startswith("FAKT:"):
+                text = line[5:].strip()
+                if 8 < len(text) < 90:
+                    fakt_lines.append(text)
+            elif line.startswith("SKILL:"):
+                text = line[6:].strip()
+                if 8 < len(text) < 90:
+                    fakt_lines.append(text)
+
+    if fakt_lines:
+        return fakt_lines[:max_phrases]
+
+    # Bigram fallback for conversation documents
+    all_text = " ".join(documents[:20])
+    all_text = re.sub(r"(Nutzer|TENS):\s*", " ", all_text)
+    words = re.findall(r"\b[A-Za-zÄäÖöÜüß]{5,20}\b", all_text)
+    valid = [w.lower() for w in words if w.lower() not in STOP_WORDS]
+
+    bigrams: Counter = Counter()
+    for i in range(len(valid) - 1):
+        bigrams[f"{valid[i].capitalize()} {valid[i+1].capitalize()}"] += 1
+
+    phrases = [p for p, c in bigrams.most_common(max_phrases * 2) if c >= 2]
+    if phrases:
+        return phrases[:max_phrases]
+
+    freq: Counter = Counter(valid)
+    return [w.capitalize() for w, c in freq.most_common(max_phrases) if c >= 2]
 
 
 @app.get("/brain")
 def get_brain():
     client = chromadb.PersistentClient(path=MEMORY_PATH)
-    collection = client.get_or_create_collection("gespraeche")
-    data = collection.get(include=["documents", "metadatas"])
-
-    documents = data["documents"] or []
-    metadatas = data["metadatas"] or [{}] * len(documents)
-    ids = data["ids"] or []
-    total = len(documents)
+    all_cols = client.list_collections()
+    col_names = {c.name for c in all_cols}
 
     nodes = [{
-        "id": "tens-core",
-        "label": "TENS",
-        "cat": "kern",
-        "entries": max(total, 1),
-        "facts": [
-            "Persönlicher KI-Assistent",
-            "Dolphin-Mistral via Ollama",
-            f"{total} Gedächtnis-Einträge",
-        ],
+        "id":      "tens-core",
+        "label":   "TENS",
+        "cat":     "kern",
+        "entries": 1,
+        "facts":   ["Persönlicher KI-Assistent", "Dolphin-Mistral via Ollama", "Lokales Wissensnetz"],
     }]
     links = []
+    total_entries = 0
 
-    if documents:
-        knowledge_topics: dict = {}
-        word_freq: Counter = Counter()
-        word_docs: dict = defaultdict(set)
+    # ── wissen_* collections ──────────────────────────────────────────────
+    for col in sorted(all_cols, key=lambda c: c.name):
+        if not col.name.startswith("wissen_"):
+            continue
+        try:
+            wissen_col = client.get_collection(col.name)
+            data  = wissen_col.get(include=["documents", "metadatas"])
+            docs  = data["documents"] or []
+            ids   = data["ids"] or []
+            count = len(docs)
+            total_entries += count
 
-        for i, (doc, meta) in enumerate(zip(documents, metadatas)):
-            if meta and meta.get("typ") == "wissen":
-                source = meta.get("quelle", ids[i] if i < len(ids) else "")
-                topic = url_to_topic(source) if source.startswith("http") else str(source)[:24].title()
-                if topic not in knowledge_topics:
-                    knowledge_topics[topic] = {"count": 0, "facts": [], "cat": categorize(topic)}
-                knowledge_topics[topic]["count"] += 1
-                for line in doc.split("\n"):
-                    line = line.strip()
-                    if line.startswith(("FAKT:", "SKILL:")):
-                        knowledge_topics[topic]["facts"].append(line[:70])
-            else:
-                words = re.findall(r'\b[A-Za-zÄäÖöÜüß]{4,20}\b', doc)
-                for w in words:
-                    wl = w.lower()
-                    if wl not in STOP_WORDS:
-                        word_freq[wl] += 1
-                        word_docs[wl].add(i)
+            cat     = collection_to_category(col.name)
+            display = collection_display_name(col.name)
+            node_id = f"col-{col.name}"
+            phrases = extract_key_phrases(docs, max_phrases=5)
+            facts   = phrases if phrases else [f"{count} Einträge gespeichert"]
 
-        # Knowledge topic nodes (max 12)
-        for topic, info in sorted(knowledge_topics.items(), key=lambda x: -x[1]["count"])[:12]:
-            nid = "kn-" + re.sub(r'\W+', '-', topic.lower())[:18]
-            facts = info["facts"][:4] if info["facts"] else [f"Quelle: {topic}"]
             nodes.append({
-                "id": nid,
-                "label": topic,
-                "cat": info["cat"],
-                "entries": info["count"],
-                "facts": facts,
+                "id":      node_id,
+                "label":   display,
+                "cat":     cat,
+                "entries": max(count, 1),
+                "facts":   facts,
             })
-            links.append({"source": "tens-core", "target": nid})
+            links.append({"source": "tens-core", "target": node_id})
 
-        # Keyword nodes from conversations (max 12, min 2 occurrences)
-        added = 0
-        existing_labels = {n["label"].lower() for n in nodes}
-        for word, count in word_freq.most_common(40):
-            if added >= 12:
-                break
-            if count < 2:
-                break
-            label = word.capitalize()
-            if any(label.lower() in ex or ex in label.lower() for ex in existing_labels):
-                continue
-            nid = "kw-" + word[:18]
-            cat = categorize(word)
+            # Sub-nodes: one per unique source (URL or named ID), up to 4
+            sources_seen: dict = {}
+            for i, (doc_id, doc) in enumerate(zip(ids, docs)):
+                if len(sources_seen) >= 4:
+                    break
+                label = url_to_topic(doc_id) if doc_id.startswith("http") else doc_id[:20].replace("_", " ").title()
+                if label in sources_seen:
+                    continue
+                sources_seen[label] = True
+
+                sub_id    = f"sub-{col.name}-{i}"
+                sub_facts = [l.strip()[5:].strip() for l in doc.split("\n") if l.strip().startswith("FAKT:")][:3]
+                if not sub_facts:
+                    sub_facts = [f"Quelle: {label}"]
+
+                nodes.append({
+                    "id":      sub_id,
+                    "label":   label[:18],
+                    "cat":     cat,
+                    "entries": 1,
+                    "facts":   sub_facts,
+                })
+                links.append({"source": node_id, "target": sub_id})
+        except Exception:
+            pass
+
+    # ── gespraeche collection ─────────────────────────────────────────────
+    if "gespraeche" in col_names:
+        try:
+            gcol  = client.get_collection("gespraeche")
+            data  = gcol.get(include=["documents", "metadatas"])
+            docs  = data["documents"] or []
+            metas = data["metadatas"] or []
+            total_entries += len(docs)
+
+            # Only count real conversations (not old web-knowledge entries)
+            conv_docs = [d for d, m in zip(docs, metas)
+                         if not (m and m.get("typ") == "wissen")]
+
+            phrases = extract_key_phrases(conv_docs or docs, max_phrases=6)
+            facts   = phrases if phrases else ["Gesprächsverlauf mit TENS"]
+
             nodes.append({
-                "id": nid,
-                "label": label,
-                "cat": cat,
-                "entries": count,
-                "facts": [f"In {len(word_docs[word])} Gesprächen erwähnt"],
+                "id":      "col-gespraeche",
+                "label":   "Gespräche",
+                "cat":     "kern",
+                "entries": max(len(conv_docs), 1),
+                "facts":   facts,
             })
-            links.append({"source": "tens-core", "target": nid})
-            existing_labels.add(label.lower())
-            added += 1
+            links.append({"source": "tens-core", "target": "col-gespraeche"})
+        except Exception:
+            pass
 
-        # Cross-links within same category (chain them)
-        by_cat: dict = defaultdict(list)
-        for n in nodes:
-            if n["id"] != "tens-core":
-                by_cat[n["cat"]].append(n["id"])
-        for cat_nodes in by_cat.values():
-            for i in range(len(cat_nodes) - 1):
-                links.append({"source": cat_nodes[i], "target": cat_nodes[i + 1]})
-
-    # Personal profile node
+    # ── nutzer_profil.json → Persönlichkeit cluster ───────────────────────
     if os.path.exists(PROFIL_FILE):
         try:
             with open(PROFIL_FILE, "r", encoding="utf-8") as f:
                 profil = json.load(f)
             if profil:
-                name = profil.get("name", "Nutzer")
-                person_id = "personal-" + re.sub(r'\W+', '', name.lower())
+                name      = profil.get("name", "Nutzer")
+                person_id = "personal-" + re.sub(r"\W+", "", name.lower())
+
                 nodes.append({
-                    "id": person_id,
-                    "label": name,
-                    "cat": "persoenlich",
-                    "entries": len(profil),
-                    "facts": [f"{k}: {v}" for k, v in profil.items() if v][:6],
+                    "id":      person_id,
+                    "label":   name.upper(),
+                    "cat":     "persoenlich",
+                    "entries": max(len(profil) * 2, 2),
+                    "facts":   [f"{k}: {v}" for k, v in profil.items() if v][:6],
                 })
                 links.append({"source": "tens-core", "target": person_id})
+
+                KEY_LABELS = {
+                    "name":       "Name",
+                    "alter":      "Alter",
+                    "geburtstag": "Geburtstag",
+                    "wohnort":    "Wohnort",
+                    "beruf":      "Beruf",
+                    "hobbys":     "Hobbys",
+                    "interessen": "Interessen",
+                    "sprache":    "Sprache",
+                }
+                for key, val in profil.items():
+                    if not val:
+                        continue
+                    fact_id = f"fact-{key}"
+                    label   = KEY_LABELS.get(key, key.capitalize())
+                    nodes.append({
+                        "id":      fact_id,
+                        "label":   label,
+                        "cat":     "persoenlich",
+                        "entries": 1,
+                        "facts":   [str(val)],
+                    })
+                    links.append({"source": person_id, "target": fact_id})
         except Exception:
             pass
 
     return {
         "nodes": nodes,
         "links": links,
-        "meta": {
-            "total_entries": total,
-            "updated": datetime.now().isoformat(),
+        "meta":  {
+            "total_entries": total_entries,
+            "updated":       datetime.now().isoformat(),
         },
     }
 
