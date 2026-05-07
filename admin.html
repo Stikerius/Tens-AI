@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TENS – Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0a0a; --bg-2: #111111; --bg-3: #161616; --bg-4: #1c1c1c;
+  --border: rgba(255,255,255,0.07); --border-2: rgba(255,255,255,0.12);
+  --text: #e8e8e8; --text-2: #999; --text-3: #555;
+  --accent: #5b8dee; --accent-2: rgba(91,141,238,0.15); --accent-3: rgba(91,141,238,0.08);
+  --red: #e05555; --green: #4caf82;
+  --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+html, body { min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+/* ── Login overlay ── */
+#login-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+#login-box { width: 340px; padding: 36px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 8px; }
+#login-logo { font-family: var(--mono); font-size: 22px; letter-spacing: 4px; margin-bottom: 6px; }
+#login-sub  { font-size: 11px; color: var(--text-3); font-family: var(--mono); margin-bottom: 28px; }
+.lf { margin-bottom: 12px; }
+.lf label { display: block; font-size: 10px; color: var(--text-2); margin-bottom: 5px; font-family: var(--mono); letter-spacing: 0.5px; }
+.lf input { width: 100%; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 14px; padding: 9px 12px; border-radius: 6px; outline: none; }
+.lf input:focus { border-color: var(--accent); }
+#login-btn { width: 100%; margin-top: 6px; padding: 10px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+#login-btn:hover { opacity: 0.9; }
+#login-err { color: var(--red); font-size: 12px; margin-top: 8px; display: none; }
+
+/* ── App ── */
+#app { display: none; }
+#topbar {
+  display: flex; align-items: center; padding: 0 24px; height: 52px;
+  background: var(--bg-2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+}
+#topbar-logo { font-family: var(--mono); font-size: 15px; letter-spacing: 2px; }
+#topbar-sub  { font-size: 12px; color: var(--text-3); margin-left: 8px; font-family: var(--mono); }
+#topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.nav-link { font-size: 12px; color: var(--text-2); text-decoration: none; padding: 5px 10px; border: 1px solid var(--border); border-radius: 5px; font-family: var(--mono); transition: all 0.15s; }
+.nav-link:hover { color: var(--accent); border-color: rgba(91,141,238,0.4); background: var(--accent-3); }
+#topbar-user { font-size: 12px; color: var(--text-3); font-family: var(--mono); }
+
+/* ── Content ── */
+.container { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+h2 { font-size: 18px; font-weight: 600; margin-bottom: 20px; color: var(--text); }
+
+/* ── Stats grid ── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 32px; }
+.stat-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+.stat-card .label { font-size: 11px; color: var(--text-3); font-family: var(--mono); letter-spacing: 0.5px; margin-bottom: 6px; }
+.stat-card .value { font-size: 28px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+
+/* ── Tables ── */
+.section { margin-bottom: 32px; }
+.section-title { font-size: 12px; font-family: var(--mono); letter-spacing: 1.5px; color: var(--text-3); text-transform: uppercase; margin-bottom: 12px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { text-align: left; font-size: 11px; font-family: var(--mono); color: var(--text-3); letter-spacing: 1px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-weight: 400; }
+.data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-2); }
+.data-table tr:hover td { background: var(--bg-2); }
+.data-table .name { color: var(--text); font-weight: 500; }
+.data-table .mono { font-family: var(--mono); font-size: 12px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-family: var(--mono); letter-spacing: 0.5px; }
+.badge-admin { background: rgba(91,141,238,0.15); color: var(--accent); border: 1px solid rgba(91,141,238,0.3); }
+.badge-user  { background: rgba(255,255,255,0.05); color: var(--text-3); border: 1px solid var(--border); }
+
+/* ── Action buttons ── */
+.btn-delete { background: none; border: 1px solid rgba(224,85,85,0.3); color: rgba(224,85,85,0.7); font-family: var(--mono); font-size: 10px; padding: 4px 10px; cursor: pointer; border-radius: 4px; transition: all 0.15s; }
+.btn-delete:hover { background: rgba(224,85,85,0.12); color: var(--red); border-color: var(--red); }
+.btn-icon { background: none; border: 1px solid var(--border); color: var(--text-2); font-family: var(--mono); font-size: 10px; padding: 4px 10px; cursor: pointer; border-radius: 4px; transition: all 0.15s; text-decoration: none; display: inline-block; }
+.btn-icon:hover { border-color: var(--border-2); color: var(--text); }
+
+/* ── Add user form ── */
+.form-row { display: flex; gap: 10px; align-items: flex-end; margin-top: 16px; flex-wrap: wrap; }
+.form-field { display: flex; flex-direction: column; gap: 5px; }
+.form-field label { font-size: 10px; color: var(--text-3); font-family: var(--mono); letter-spacing: 0.5px; }
+.form-field input { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 12px; border-radius: 6px; outline: none; width: 180px; }
+.form-field input:focus { border-color: var(--accent); }
+.btn-primary { background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 500; padding: 9px 18px; cursor: pointer; transition: opacity 0.15s; }
+.btn-primary:hover { opacity: 0.9; }
+.form-msg { font-size: 12px; margin-top: 8px; }
+.form-msg.ok { color: var(--green); }
+.form-msg.err { color: var(--red); }
+
+/* ── Profile detail panel ── */
+#user-detail { display: none; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+#user-detail h3 { font-size: 15px; margin-bottom: 14px; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.profile-item { background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+.profile-item .k { font-size: 10px; color: var(--text-3); font-family: var(--mono); margin-bottom: 4px; }
+.profile-item .v { font-size: 13px; color: var(--text); }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div id="login-box">
+    <div id="login-logo">TENS</div>
+    <div id="login-sub">ADMIN DASHBOARD</div>
+    <div class="lf"><label>BENUTZERNAME</label><input type="text" id="lu" placeholder="ivan" autocomplete="username"></div>
+    <div class="lf"><label>PASSWORT</label><input type="password" id="lp" placeholder="••••••••" autocomplete="current-password"></div>
+    <button id="login-btn" onclick="doLogin()">Anmelden</button>
+    <div id="login-err">Ungültige Anmeldedaten oder keine Admin-Rechte.</div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="topbar">
+    <span id="topbar-logo">TENS</span>
+    <span id="topbar-sub">/ Admin</span>
+    <div id="topbar-right">
+      <span id="topbar-user"></span>
+      <a class="nav-link" href="/">← Chat</a>
+      <a class="nav-link" href="/brain-view" target="_blank">Brain</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="label">BENUTZER</div><div class="value" id="s-users">–</div></div>
+      <div class="stat-card"><div class="label">GESPRÄCHE</div><div class="value" id="s-convs">–</div></div>
+      <div class="stat-card"><div class="label">WISSENS-EINTRÄGE</div><div class="value" id="s-entries">–</div></div>
+      <div class="stat-card"><div class="label">KOLLEKTIONEN</div><div class="value" id="s-cols">–</div></div>
+    </div>
+
+    <!-- User detail panel -->
+    <div id="user-detail">
+      <h3 id="detail-name">Benutzer</h3>
+      <div class="profile-grid" id="detail-profile"></div>
+    </div>
+
+    <!-- Users section -->
+    <div class="section">
+      <div class="section-title">Benutzer</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>ID</th><th>Rolle</th><th>Nachrichten</th><th>Erstellt</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Add user section -->
+    <div class="section">
+      <div class="section-title">Benutzer hinzufügen</div>
+      <div class="form-row">
+        <div class="form-field"><label>BENUTZERNAME</label><input type="text" id="new-user" placeholder="max"></div>
+        <div class="form-field"><label>ANZEIGENAME</label><input type="text" id="new-name" placeholder="Max Muster"></div>
+        <div class="form-field"><label>PASSWORT</label><input type="password" id="new-pass" placeholder="Passwort"></div>
+        <button class="btn-primary" onclick="addUser()">Hinzufügen</button>
+      </div>
+      <div id="add-msg" class="form-msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let _token = localStorage.getItem('tens_token') || '';
+let _user  = JSON.parse(localStorage.getItem('tens_user') || 'null');
+
+function authH() {
+  return _token ? { 'Authorization': `Bearer ${_token}` } : {};
+}
+
+async function doLogin() {
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value;
+  const err = document.getElementById('login-err');
+  err.style.display = 'none';
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p }),
+    });
+    if (!res.ok) { err.style.display = 'block'; return; }
+    const data = await res.json();
+    if (data.role !== 'admin') { err.textContent = 'Kein Admin-Account.'; err.style.display = 'block'; return; }
+    _token = data.token; _user = { id: data.user_id, name: data.name, role: data.role };
+    localStorage.setItem('tens_token', _token);
+    localStorage.setItem('tens_user', JSON.stringify(_user));
+    showApp();
+  } catch {
+    err.textContent = 'API nicht erreichbar.'; err.style.display = 'block';
+  }
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  if (_user) document.getElementById('topbar-user').textContent = _user.name;
+  loadData();
+}
+
+async function loadData() {
+  await Promise.all([loadStats(), loadUsers()]);
+}
+
+async function loadStats() {
+  try {
+    const res  = await fetch(`${API}/admin/stats`, { headers: authH() });
+    const data = await res.json();
+    document.getElementById('s-users').textContent   = data.total_users ?? '–';
+    document.getElementById('s-convs').textContent   = data.total_conversations ?? '–';
+    document.getElementById('s-entries').textContent = data.total_entries ?? '–';
+    document.getElementById('s-cols').textContent    = data.total_collections ?? '–';
+  } catch {}
+}
+
+async function loadUsers() {
+  try {
+    const res   = await fetch(`${API}/admin/users`, { headers: authH() });
+    const users = await res.json();
+    const tbody = document.getElementById('users-tbody');
+    if (!Array.isArray(users)) return;
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td class="name">${esc(u.name)}</td>
+        <td class="mono">${esc(u.id)}</td>
+        <td><span class="badge ${u.role === 'admin' ? 'badge-admin' : 'badge-user'}">${u.role}</span></td>
+        <td class="mono">${u.message_count ?? 0}</td>
+        <td class="mono" style="font-size:11px;color:var(--text-3)">${u.created ? new Date(u.created).toLocaleDateString('de-CH') : '–'}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn-icon" onclick="showUserDetail('${u.id}','${esc(u.name)}')">Profil</button>
+          ${u.id !== 'ivan' ? `<button class="btn-delete" onclick="deleteUser('${u.id}','${esc(u.name)}')">Löschen</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+  } catch {}
+}
+
+async function showUserDetail(uid, name) {
+  const panel = document.getElementById('user-detail');
+  document.getElementById('detail-name').textContent = name;
+  document.getElementById('detail-profile').innerHTML = '<span style="color:var(--text-3)">Lädt...</span>';
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const res  = await fetch(`${API}/admin/user/${uid}`, { headers: authH() });
+    const data = await res.json();
+    const profil = data.profil || {};
+    const keys   = Object.keys(profil);
+    const grid   = document.getElementById('detail-profile');
+    if (!keys.length) {
+      grid.innerHTML = '<span style="color:var(--text-3);font-size:12px">Kein Profil gespeichert.</span>';
+    } else {
+      grid.innerHTML = keys.map(k => `
+        <div class="profile-item"><div class="k">${esc(k)}</div><div class="v">${esc(String(profil[k]))}</div></div>
+      `).join('');
+    }
+  } catch {
+    document.getElementById('detail-profile').innerHTML = '<span style="color:var(--red)">Fehler beim Laden.</span>';
+  }
+}
+
+async function deleteUser(uid, name) {
+  if (!confirm(`Benutzer "${name}" wirklich löschen?`)) return;
+  try {
+    const res = await fetch(`${API}/admin/user/${uid}`, { method: 'DELETE', headers: authH() });
+    const data = await res.json();
+    if (data.ok) { loadData(); document.getElementById('user-detail').style.display = 'none'; }
+    else alert(`Fehler: ${data.detail}`);
+  } catch (e) { alert(`Fehler: ${e.message}`); }
+}
+
+async function addUser() {
+  const uid  = document.getElementById('new-user').value.trim();
+  const name = document.getElementById('new-name').value.trim();
+  const pass = document.getElementById('new-pass').value;
+  const msg  = document.getElementById('add-msg');
+  msg.textContent = ''; msg.className = 'form-msg';
+  if (!uid || !name || !pass) { msg.textContent = 'Alle Felder ausfüllen.'; msg.className = 'form-msg err'; return; }
+  try {
+    const res  = await fetch(`${API}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authH() },
+      body: JSON.stringify({ username: uid, name, password: pass }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = `Benutzer "${name}" erstellt.`; msg.className = 'form-msg ok';
+      document.getElementById('new-user').value = '';
+      document.getElementById('new-name').value = '';
+      document.getElementById('new-pass').value = '';
+      loadUsers();
+    } else {
+      msg.textContent = data.detail || 'Fehler'; msg.className = 'form-msg err';
+    }
+  } catch (e) { msg.textContent = e.message; msg.className = 'form-msg err'; }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Boot
+(function() {
+  document.getElementById('lp').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+  document.getElementById('lu').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('lp').focus(); });
+  if (_token && _user?.role === 'admin') showApp();
+})();
+</script>
+</body>
+</html>

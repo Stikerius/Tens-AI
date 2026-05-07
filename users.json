@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ivan",
+    "name": "Ivan",
+    "password_hash": "$2b$12$jH1Qgm5u3TLbIopHvUxDDuBzLVEo2pPOxRrB4toUgOluS3j1SPnyW",
+    "role": "admin",
+    "created": "2026-05-07T16:36:00.933518"
+  }
+]

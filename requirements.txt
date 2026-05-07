@@ -1,0 +1,41 @@
+# TENS – Requirements
+# Install: pip install -r requirements.txt
+
+# ── Core API ──────────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+requests>=2.31.0
+
+# ── Vector DB ─────────────────────────────────────────────────────────────────
+chromadb>=0.5.0
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.0
+
+# ── TTS ───────────────────────────────────────────────────────────────────────
+edge-tts>=6.1.9
+
+# ── Web scraping ──────────────────────────────────────────────────────────────
+duckduckgo-search>=6.1.0
+beautifulsoup4>=4.12.0
+lxml>=5.2.0
+
+# ── File parsing (optional) ───────────────────────────────────────────────────
+pypdf>=4.2.0
+python-docx>=1.1.0
+pandas>=2.2.0
+
+# ── Speech-to-text (optional, heavy) ─────────────────────────────────────────
+# openai-whisper>=20231117
+
+# ── AI API clients (optional, for learn_from_ai.py) ──────────────────────────
+# anthropic>=0.28.0
+# openai>=1.30.0
+
+# ── Env file support ──────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+
+# ── Multipart form parsing ────────────────────────────────────────────────────
+python-multipart>=0.0.9
